@@ -1,0 +1,14 @@
+# Node modules
+node_modules/
+
+# WhatsApp Web.js auth folder (LocalAuth session)
+wwebjs_auth_safe/
+
+# Logok
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Rendszer fájlok
+.DS_Store
+Thumbs.db

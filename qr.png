@@ -1,0 +1,8 @@
+client.on('qr', qr => {
+  const fs = require('fs');
+  const qrCode = require('qrcode');
+  qrCode.toFile('qr.png', qr, { width: 300 }, (err) => {
+    if(err) console.error(err);
+    else console.log('QR-kód elmentve: qr.png');
+  });
+});

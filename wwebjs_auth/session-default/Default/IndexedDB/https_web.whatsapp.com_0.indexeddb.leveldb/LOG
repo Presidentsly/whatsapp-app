@@ -1,0 +1,26 @@
+2025/09/23-09:10:21.182 c94 Reusing MANIFEST C:\Users\Sly\Whatsapp\wwebjs_auth\session-default\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/09/23-09:10:21.182 c94 Recovering log #55
+2025/09/23-09:10:21.200 c94 Reusing old log C:\Users\Sly\Whatsapp\wwebjs_auth\session-default\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000055.log 
+2025/09/23-09:10:23.772 359c Level-0 table #62: started
+2025/09/23-09:10:23.777 359c Level-0 table #62: 173487 bytes OK
+2025/09/23-09:10:23.779 359c Delete type=0 #55
+2025/09/23-09:10:23.780 359c Manual compaction at level-0 from '\x00\x1a\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1b\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/09/23-09:10:23.782 3a70 Level-0 table #64: started
+2025/09/23-09:10:23.794 3a70 Level-0 table #64: 447 bytes OK
+2025/09/23-09:10:23.796 3a70 Delete type=0 #61
+2025/09/23-09:10:23.796 3a70 Manual compaction at level-0 from '\x00\x1b\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1c\x00\x00\x00' @ 0 : 0; will stop at '\x00\x1b\x00\x00\x05' @ 275588 : 0
+2025/09/23-09:10:23.796 3a70 Compacting 1@0 + 1@1 files
+2025/09/23-09:10:23.806 3a70 Generated table #65@0: 5094 keys, 105192 bytes
+2025/09/23-09:10:23.806 3a70 Compacted 1@0 + 1@1 files => 105192 bytes
+2025/09/23-09:10:23.807 3a70 compacted to: files[ 0 1 2 0 0 0 0 ]
+2025/09/23-09:10:23.808 3a70 Delete type=2 #64
+2025/09/23-09:10:23.808 3a70 Manual compaction at level-0 from '\x00\x1b\x00\x00\x05' @ 275588 : 0 .. '\x00\x1c\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/09/23-09:10:25.078 3a70 Compacting 1@1 + 2@2 files
+2025/09/23-09:10:25.128 3a70 Generated table #66@1: 34754 keys, 2202686 bytes
+2025/09/23-09:10:25.155 3a70 Generated table #67@1: 27986 keys, 684439 bytes
+2025/09/23-09:10:25.155 3a70 Compacted 1@1 + 2@2 files => 2887125 bytes
+2025/09/23-09:10:25.156 3a70 compacted to: files[ 0 0 2 0 0 0 0 ]
+2025/09/23-09:10:25.156 3a70 Delete type=2 #58
+2025/09/23-09:10:25.157 3a70 Delete type=2 #59
+2025/09/23-09:10:25.157 3a70 Delete type=2 #62
+2025/09/23-09:10:25.157 3a70 Delete type=2 #65
