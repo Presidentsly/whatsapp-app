@@ -90,11 +90,6 @@ client.on('ready', () => {
     });
 });
 
-// --- ÚJ ROUT: REST API az üzenetekhez ---
-app.get('/api/messages', (req, res) => {
-    res.json(messages); // JSON-ként visszaadja az összes üzenetet
-});
-
 // Frontend
 app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
