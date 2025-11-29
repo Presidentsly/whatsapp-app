@@ -6,15 +6,15 @@ const qrcode = require('qrcode-terminal');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws' });
+const wss = new WebSocket.Server({ server, path: '/ws' }); // WebSocket path javítva
 
 const messages = [];
 
-// LocalAuth session mappa
+// LocalAuth session mappa (Windows zárolás elkerülésére új mappa)
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
-        dataPath: './wwebjs_auth_safe'
+        dataPath: './wwebjs_auth_safe' // új mappa
     })
 });
 
@@ -30,10 +30,12 @@ client.on('authenticated', session => {
 client.on('ready', () => {
     console.log('WhatsApp kliens csatlakozott!');
 
-    // WebSocket kapcsolat
+    // WebSocket kapcsolat és üzenetek csak itt
     wss.on('connection', socket => {
+        // Előzmények elküldése
         socket.send(JSON.stringify({ type:'history', payload: messages }));
 
+        // Front-endről érkező üzenetek
         socket.on('message', async data => {
             try {
                 const { type, payload } = JSON.parse(data);
@@ -41,24 +43,14 @@ client.on('ready', () => {
                     const { to, text } = payload;
                     if(to && text) {
                         await client.sendMessage(to, text);
-                        const item = {
-                            from: 'Me',
-                            name: 'Te',
-                            text,
-                            t: Date.now()
-                        };
-                        messages.push(item);
-                        if(messages.length > 200) messages.shift();
-                        const dataToSend = JSON.stringify({ type:'message', payload: item });
-                        wss.clients.forEach(s => {
-                            if(s.readyState === WebSocket.OPEN) s.send(dataToSend);
-                        });
+                        console.log('Elküldve:', text, '->', to);
                     }
                 }
             } catch(err) { console.error(err); }
         });
     });
 
+    // Bejövő üzenetek kezelése
     client.on('message', async msg => {
         try {
             const contact = await msg.getContact();
@@ -68,29 +60,18 @@ client.on('ready', () => {
                 text: msg.body,
                 t: Date.now()
             };
-
-            if (msg.hasMedia) {
-                const media = await msg.downloadMedia();
-                if (media && media.data) {
-                    item.media = {
-                        mimetype: media.mimetype,
-                        data: media.data
-                    };
-                }
-            }
-
             messages.push(item);
             if(messages.length > 200) messages.shift();
 
-            const dataToSend = JSON.stringify({ type:'message', payload: item });
+            const data = JSON.stringify({ type:'message', payload: item });
             wss.clients.forEach(socket => {
-                if(socket.readyState === WebSocket.OPEN) socket.send(dataToSend);
+                if(socket.readyState === WebSocket.OPEN) socket.send(data);
             });
         } catch(err) { console.error(err); }
     });
 });
 
-// Frontend
+// Front-end HTML
 app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
@@ -100,87 +81,54 @@ app.get('/', (req, res) => {
 <title>WhatsApp Közös Nézet + Válasz</title>
 <style>
 body { font-family: sans-serif; background:#f4f4f4; }
-.header { text-align:center; margin:10px auto; font-size:18px; color:#000; display:flex; justify-content:space-between; align-items:center; max-width:800px; }
-.clock { color:#ffd106; font-weight:bold; }
-.messages { max-width:800px; margin:0 auto 20px; padding:10px; background:#fff; border-radius:8px; height:60vh; overflow:auto; }
-.msg { margin:10px 0; padding:8px 12px; background:#eef; border-radius:6px; position:relative; }
+.messages { max-width:800px; margin:20px auto; padding:10px; background:#fff; border-radius:8px; height:60vh; overflow:auto; }
+.msg { margin:10px 0; padding:8px 12px; background:#eef; border-radius:6px; }
 .meta { font-size:12px; color:#666; margin-bottom:4px; }
-.reply-btn, .del-btn { margin-left:5px; font-size:11px; padding:2px 6px; cursor:pointer; }
-form { max-width:800px; margin:10px auto; display:flex; gap:10px; }
+.reply-btn { margin-left:10px; font-size:11px; padding:2px 6px; cursor:pointer; }
+form { max-width:800px; margin:10px auto; display:flex; gap:10px; flex-wrap: wrap; align-items: center; }
 input[type=text] { flex:1; padding:8px; border-radius:6px; border:1px solid #ccc; }
 button { padding:8px 14px; border:none; border-radius:6px; background:#4caf50; color:#fff; font-weight:bold; cursor:pointer; }
-.media { max-width:100%; margin-top:8px; border-radius:6px; }
-.emoji-row { display:flex; flex-wrap:wrap; gap:5px; max-width:800px; margin:10px auto; }
-.emoji-btn { cursor:pointer; font-size:20px; border:none; background:none; }
+.emoji-btn { font-size:20px; margin-right:5px; cursor:pointer; background:none; border:none; }
+#emojiContainer { margin-top:10px; }
 </style>
 </head>
 <body>
-<div class="header">
-    <div>WhatsApp – Közös nézet és válasz</div>
-    <div class="clock" id="clock">--:--:--</div>
-</div>
+<h2 style="text-align:center">WhatsApp – Közös nézet és válasz</h2>
 <div class="messages" id="messages"></div>
 <form id="chatForm">
 <input type="hidden" id="target" value="">
 <input type="text" id="reply" placeholder="Írd ide az üzenetet..." required />
 <button type="submit">Küldés</button>
+<div id="emojiContainer">
+  <button type="button" class="emoji-btn">😀</button>
+  <button type="button" class="emoji-btn">😂</button>
+  <button type="button" class="emoji-btn">😍</button>
+  <button type="button" class="emoji-btn">😎</button>
+  <button type="button" class="emoji-btn">👍</button>
+</div>
 </form>
-
-<!-- Emoji külön sorok -->
-<div class="emoji-row" id="emojiContainer"></div>
-
 <script>
 const messagesEl = document.getElementById('messages');
 const targetInput = document.getElementById('target');
 const replyInput = document.getElementById('reply');
-const emojiContainer = document.getElementById('emojiContainer');
 const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');
 
 ws.onopen = () => console.log('WebSocket csatlakozott!');
 ws.onerror = err => console.error('WebSocket hiba:', err);
 
-// Óra
-function updateClock() {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2,'0');
-    const m = String(now.getMinutes()).padStart(2,'0');
-    const s = String(now.getSeconds()).padStart(2,'0');
-    document.getElementById('clock').textContent = h + ':' + m + ':' + s;
-}
-setInterval(updateClock, 1000);
-updateClock();
-
 function addMessage(msg) {
     const wrap = document.createElement('div');
     wrap.className = 'msg';
-    wrap.dataset.from = msg.from;
-
     const meta = document.createElement('div');
     meta.className = 'meta';
     meta.textContent = (msg.name || msg.from) + ' @ ' + new Date(msg.t).toLocaleString();
-
     const replyBtn = document.createElement('button');
     replyBtn.textContent = 'Válasz';
     replyBtn.className = 'reply-btn';
     replyBtn.onclick = () => targetInput.value = msg.from;
     meta.appendChild(replyBtn);
-
-    const delBtn = document.createElement('button');
-    delBtn.textContent = 'Törlés';
-    delBtn.className = 'del-btn';
-    delBtn.onclick = () => wrap.remove();
-    meta.appendChild(delBtn);
-
     wrap.appendChild(meta);
-
-    if (msg.text) wrap.appendChild(document.createTextNode(msg.text));
-    if (msg.media && msg.media.data) {
-        const img = document.createElement('img');
-        img.src = "data:" + msg.media.mimetype + ";base64," + msg.media.data;
-        img.className = "media";
-        wrap.appendChild(img);
-    }
-
+    wrap.appendChild(document.createTextNode(msg.text));
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -200,22 +148,12 @@ document.getElementById('chatForm').addEventListener('submit', e => {
     replyInput.value = '';
 });
 
-// Emoji külön sorok
-const emojiCategories = {
-    "Smileys": ["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],
-    "Hearts": ["❤️","💔","💖","💙","💚","💛","💜","🖤"],
-    "Gestures": ["👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙏"]
-};
-
-for (const cat in emojiCategories) {
-    emojiCategories[cat].forEach(e => {
-        const btn = document.createElement('button');
-        btn.textContent = e;
-        btn.className = 'emoji-btn';
-        btn.onclick = () => replyInput.value = e;
-        emojiContainer.appendChild(btn);
+// Emoji gombok – csak egy emoji kerül a mezőbe
+document.querySelectorAll('.emoji-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        replyInput.value = btn.textContent;
     });
-}
+});
 </script>
 </body>
 </html>`);
