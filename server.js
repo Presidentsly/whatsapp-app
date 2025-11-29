@@ -60,7 +60,7 @@ client.on('ready', () => {
     // Üzenetek kezelése
     client.on('message', async msg => {
         try {
-            // Stabil contact lekérés
+            // Stabil contact lekérés a getContacts segítségével
             const contacts = await client.getContacts();
             const contact = contacts.find(c => c.id._serialized === msg.from) || { pushname: null, number: msg.from };
 
@@ -161,7 +161,8 @@ for(const cat in emojiCategories){ emojiCategories[cat].forEach(e=>{ const btn=d
 </html>`);
 });
 
+// Render vagy bármely más környezet portja
 const PORT = process.env.PORT || 3000;
-server.listen(PORT,()=>console.log('Szerver fut: http://localhost:'+PORT));
+server.listen(PORT, () => console.log(`Szerver fut a ${PORT}-es porton`));
 
 client.initialize();
