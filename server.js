@@ -10,6 +10,7 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const messages = [];
 
+// WhatsApp Web.js kliens inicializálása LocalAuth-tal
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
@@ -22,13 +23,14 @@ client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
 });
 
-client.on('authenticated', () => {
+client.on('authenticated', session => {
     console.log('WhatsApp session mentve!');
 });
 
 client.on('ready', () => {
     console.log('WhatsApp kliens csatlakozott!');
 
+    // WebSocket kapcsolat
     wss.on('connection', socket => {
         socket.send(JSON.stringify({ type:'history', payload: messages }));
 
@@ -39,14 +41,11 @@ client.on('ready', () => {
                     const { to, text } = payload;
                     if(to && text) {
                         await client.sendMessage(to, text);
-                        const now = new Date();
                         const item = {
                             from: 'Me',
                             name: 'Te',
                             text,
-                            t: now.getTime(),
-                            date: now.toLocaleDateString(),
-                            time: now.toLocaleTimeString()
+                            t: Date.now()
                         };
                         messages.push(item);
                         if(messages.length > 200) messages.shift();
@@ -63,19 +62,16 @@ client.on('ready', () => {
     client.on('message', async msg => {
         try {
             const contact = await msg.getContact();
-            const now = new Date();
             const item = {
                 from: msg.from,
                 name: contact.pushname || contact.number,
                 text: msg.body,
-                t: now.getTime(),
-                date: now.toLocaleDateString(),
-                time: now.toLocaleTimeString()
+                t: Date.now()
             };
 
-            if (msg.hasMedia) {
+            if(msg.hasMedia){
                 const media = await msg.downloadMedia();
-                if (media && media.data) {
+                if(media && media.data){
                     item.media = {
                         mimetype: media.mimetype,
                         data: media.data
@@ -90,10 +86,16 @@ client.on('ready', () => {
             wss.clients.forEach(socket => {
                 if(socket.readyState === WebSocket.OPEN) socket.send(dataToSend);
             });
-        } catch(err) { console.error(err); }
+        } catch(err){ console.error(err); }
     });
 });
 
+// REST API az üzenetekhez
+app.get('/api/messages', (req, res) => {
+    res.json(messages);
+});
+
+// Frontend
 app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
@@ -106,8 +108,9 @@ body { font-family: sans-serif; background:#f4f4f4; }
 .header { text-align:center; margin:10px auto; font-size:18px; color:#000; display:flex; justify-content:space-between; align-items:center; max-width:800px; }
 .clock { color:#ffd106; font-weight:bold; }
 .messages { max-width:800px; margin:0 auto 20px; padding:10px; background:#fff; border-radius:8px; height:60vh; overflow:auto; }
-.msg { margin:10px 0; padding:8px 12px; background:#eef; border-radius:6px; position:relative; }
-.meta { font-size:12px; color:#666; margin-bottom:4px; }
+.msg { display:flex; flex-direction:row; margin:10px 0; padding:8px 12px; background:#eef; border-radius:6px; position:relative; }
+.msg .info { width:180px; font-size:12px; color:#666; margin-right:10px; text-align:left; white-space: pre-line; }
+.msg .content { flex:1; word-break:break-word; }
 .reply-btn, .del-btn { margin-left:5px; font-size:11px; padding:2px 6px; cursor:pointer; }
 form { max-width:800px; margin:10px auto; display:flex; gap:10px; }
 input[type=text] { flex:1; padding:8px; border-radius:6px; border:1px solid #ccc; }
@@ -128,7 +131,6 @@ button { padding:8px 14px; border:none; border-radius:6px; background:#4caf50; c
 <input type="text" id="reply" placeholder="Írd ide az üzenetet..." required />
 <button type="submit">Küldés</button>
 </form>
-
 <div class="emoji-row" id="emojiContainer"></div>
 
 <script>
@@ -156,50 +158,36 @@ function addMessage(msg) {
     wrap.className = 'msg';
     wrap.dataset.from = msg.from;
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = (msg.name || msg.from) + ' (' + msg.from + ') - ' + msg.date + ' ' + msg.time;
+    const info = document.createElement('div');
+    info.className = 'info';
+    info.textContent = (msg.name || msg.from) + "\\n" + msg.from.replace('@c.us','');
+
+    const content = document.createElement('div');
+    content.className = 'content';
+
+    if(msg.text) content.appendChild(document.createTextNode(msg.text));
+    if(msg.media && msg.media.data){
+        const img = document.createElement('img');
+        img.src = "data:" + msg.media.mimetype + ";base64," + msg.media.data;
+        img.className = "media";
+        content.appendChild(img);
+    }
 
     const replyBtn = document.createElement('button');
     replyBtn.textContent = 'Válasz';
     replyBtn.className = 'reply-btn';
     replyBtn.onclick = () => targetInput.value = msg.from;
-    meta.appendChild(replyBtn);
 
     const delBtn = document.createElement('button');
     delBtn.textContent = 'Törlés';
     delBtn.className = 'del-btn';
     delBtn.onclick = () => wrap.remove();
-    meta.appendChild(delBtn);
 
-    wrap.appendChild(meta);
+    content.appendChild(replyBtn);
+    content.appendChild(delBtn);
 
-    if (msg.text) wrap.appendChild(document.createTextNode(msg.text));
-    if (msg.media && msg.media.data) {
-        const type = msg.media.mimetype;
-        let mediaEl;
-        if(type.startsWith('image') || type === 'image/gif') {
-            mediaEl = document.createElement('img');
-        } else if(type.startsWith('video')) {
-            mediaEl = document.createElement('video');
-            mediaEl.controls = true;
-        } else if(type.startsWith('audio')) {
-            mediaEl = document.createElement('audio');
-            mediaEl.controls = true;
-        }
-        if(mediaEl) {
-            mediaEl.src = "data:" + type + ";base64," + msg.media.data;
-            mediaEl.className = 'media';
-            wrap.appendChild(mediaEl);
-        }
-
-        const downloadBtn = document.createElement('a');
-        downloadBtn.href = "data:" + type + ";base64," + msg.media.data;
-        downloadBtn.download = 'media';
-        downloadBtn.textContent = 'Letöltés';
-        downloadBtn.style.display = 'block';
-        wrap.appendChild(downloadBtn);
-    }
+    wrap.appendChild(info);
+    wrap.appendChild(content);
 
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -207,40 +195,28 @@ function addMessage(msg) {
 
 ws.onmessage = ev => {
     const { type, payload } = JSON.parse(ev.data);
-    if(type === 'history') payload.forEach(addMessage);
-    if(type === 'message') addMessage(payload);
+    if(type==='history') payload.forEach(addMessage);
+    if(type==='message') addMessage(payload);
 };
 
-document.getElementById('chatForm').addEventListener('submit', e => {
+document.getElementById('chatForm').addEventListener('submit', e=>{
     e.preventDefault();
     const text = replyInput.value.trim();
     const to = targetInput.value;
-    if(!text || !to) { alert('Válaszd ki, kinek küldöd!'); return; }
-    ws.send(JSON.stringify({ type:'send', payload: { to, text } }));
-    replyInput.value = '';
+    if(!text || !to){ alert('Válaszd ki, kinek küldöd!'); return; }
+    ws.send(JSON.stringify({ type:'send', payload:{ to, text } }));
+    replyInput.value='';
 });
 
-const emojiCategories = {
-    "Smileys": ["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],
-    "Hearts": ["❤️","💔","💖","💙","💚","💛","💜","🖤"],
-    "Gestures": ["👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙏"]
-};
-
-for (const cat in emojiCategories) {
-    emojiCategories[cat].forEach(e => {
-        const btn = document.createElement('button');
-        btn.textContent = e;
-        btn.className = 'emoji-btn';
-        btn.onclick = () => replyInput.value += e;
-        emojiContainer.appendChild(btn);
-    });
-}
+// Emoji
+const emojiCategories={"Smileys":["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],"Hearts":["❤️","💔","💖","💙","💚","💛","💜","🖤"],"Gestures":["👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙏"]};
+for(const cat in emojiCategories){emojiCategories[cat].forEach(e=>{const btn=document.createElement('button');btn.textContent=e;btn.className='emoji-btn';btn.onclick=()=>replyInput.value=e;emojiContainer.appendChild(btn);});}
 </script>
 </body>
 </html>`);
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Szerver fut: http://localhost:' + PORT));
+server.listen(PORT, ()=>console.log('Szerver fut: http://localhost:' + PORT));
 
 client.initialize();
