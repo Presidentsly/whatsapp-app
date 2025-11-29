@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const messages = [];
 
-// Puppeteer + WhatsApp kliens konfiguráció Render kompatibilis
+// WhatsApp kliens Render kompatibilis konfiguráció
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: 'default', dataPath: './wwebjs_auth_safe' }),
     puppeteer: {
@@ -34,54 +34,52 @@ client.on('authenticated', () => console.log('WhatsApp session mentve!'));
 client.on('ready', () => {
     console.log('WhatsApp kliens csatlakozott!');
 
-    // WebSocket kezelés
     wss.on('connection', socket => {
         socket.send(JSON.stringify({ type: 'history', payload: messages }));
 
         socket.on('message', async data => {
             try {
                 const { type, payload } = JSON.parse(data);
-                if (type === 'send') {
+                if(type === 'send') {
                     const { to, text } = payload;
-                    if (to && text) {
+                    if(to && text) {
                         await client.sendMessage(to, text);
                         const item = { from: 'Me', name: 'Te', text, t: Date.now() };
                         messages.push(item);
-                        if (messages.length > 200) messages.shift();
-                        const dataToSend = JSON.stringify({ type: 'message', payload: item });
-                        wss.clients.forEach(s => { if (s.readyState === WebSocket.OPEN) s.send(dataToSend); });
+                        if(messages.length > 200) messages.shift();
+                        const dataToSend = JSON.stringify({ type:'message', payload: item });
+                        wss.clients.forEach(s => { if(s.readyState === WebSocket.OPEN) s.send(dataToSend); });
                     }
                 }
-            } catch (err) { console.error(err); }
+            } catch(err) { console.error(err); }
         });
     });
 
-    // Üzenetek fogadása
     client.on('message', async msg => {
         try {
-            const contacts = await client.getContacts();
-            const contact = contacts.find(c => c.id._serialized === msg.from) || { pushname: null, number: msg.from };
+            // Stabil kontakt név lekérése pushname vagy from mezőből
+            const contactName = msg._data.notifyName || msg._data.pushname || msg.from;
 
             const item = {
                 from: msg.from,
-                name: contact.pushname || contact.number,
+                name: contactName,
                 text: msg.body,
                 t: Date.now()
             };
 
-            if (msg.hasMedia) {
+            if(msg.hasMedia){
                 const media = await msg.downloadMedia();
-                if (media && media.data) {
+                if(media && media.data){
                     item.media = { mimetype: media.mimetype, data: media.data };
                 }
             }
 
             messages.push(item);
-            if (messages.length > 200) messages.shift();
+            if(messages.length > 200) messages.shift();
 
-            const dataToSend = JSON.stringify({ type: 'message', payload: item });
-            wss.clients.forEach(socket => { if (socket.readyState === WebSocket.OPEN) socket.send(dataToSend); });
-        } catch (err) { console.error(err); }
+            const dataToSend = JSON.stringify({ type:'message', payload: item });
+            wss.clients.forEach(socket => { if(socket.readyState === WebSocket.OPEN) socket.send(dataToSend); });
+        } catch(err){ console.error(err); }
     });
 });
 
@@ -132,7 +130,7 @@ const emojiContainer = document.getElementById('emojiContainer');
 const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');
 ws.onopen = () => console.log('WebSocket csatlakozott!');
 ws.onerror = err => console.error('WebSocket hiba:', err);
-function updateClock() { const now=new Date(); document.getElementById('clock').textContent=now.toLocaleTimeString(); }
+function updateClock(){ const now=new Date(); document.getElementById('clock').textContent=now.toLocaleTimeString(); }
 setInterval(updateClock,1000); updateClock();
 function addMessage(msg){ const wrap=document.createElement('div'); wrap.className='msg'; const meta=document.createElement('div'); meta.className='meta'; meta.textContent=(msg.name||msg.from)+' @ '+new Date(msg.t).toLocaleString(); const replyBtn=document.createElement('button'); replyBtn.textContent='Válasz'; replyBtn.className='reply-btn'; replyBtn.onclick=()=>targetInput.value=msg.from; meta.appendChild(replyBtn); const delBtn=document.createElement('button'); delBtn.textContent='Törlés'; delBtn.className='del-btn'; delBtn.onclick=()=>wrap.remove(); meta.appendChild(delBtn); wrap.appendChild(meta); if(msg.text) wrap.appendChild(document.createTextNode(msg.text)); if(msg.media && msg.media.data){ const img=document.createElement('img'); img.src='data:'+msg.media.mimetype+';base64,'+msg.media.data; img.className='media'; wrap.appendChild(img); } messagesEl.appendChild(wrap); messagesEl.scrollTop=messagesEl.scrollHeight; }
 ws.onmessage=ev=>{ const {type,payload}=JSON.parse(ev.data); if(type==='history') payload.forEach(addMessage); if(type==='message') addMessage(payload); };
@@ -144,11 +142,9 @@ for(const cat in emojiCategories){ emojiCategories[cat].forEach(e=>{ const btn=d
 </html>`);
 });
 
-// Render kompatibilis port
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Szerver fut a ${PORT}-es porton`));
 
-// Stabil Puppeteer inicializáció újraindítással
 async function startClient(){
     try { await client.initialize(); }
     catch(err){ console.error('Puppeteer hiba, újraindítás...', err); setTimeout(startClient,5000); }
