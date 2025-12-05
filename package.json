@@ -9,8 +9,9 @@
   "dependencies": {
     "@joeattardi/emoji-button": "^4.6.4",
     "express": "^4.18.2",
+    "puppeteer": "^24.32.0",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.24.0",
+    "whatsapp-web.js": "^1.34.2",
     "ws": "^8.14.2"
   },
   "author": "",
