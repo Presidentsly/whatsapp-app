@@ -1,133 +1,15 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const { Client, LocalAuth } = require('whatsapp-web.js'); 
-const qrcode = require('qrcode-terminal');
-
-const app = express();
-const server = http.createServer(app);
-
-// *** WebSocket ugyanazon a porton ***
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-const messages = [];
-
-// WhatsApp Web.js kliens
-const client = new Client({
-    puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    },
-    authStrategy: new LocalAuth({
-        clientId: "shared",
-        dataPath: "./wwebjs_auth_safe"
-    })
-});
-
-// QR
-client.on('qr', qr => {
-    console.log("ÚJ QR KÓD! Olvasd be:");
-    qrcode.generate(qr, { small: true });
-});
-
-// Session mentve
-client.on('authenticated', () => {
-    console.log("WhatsApp: Session mentve!");
-});
-
-// WhatsApp ready
-client.on('ready', () => {
-    console.log("WhatsApp: Csatlakozva!");
-
-    wss.on('connection', socket => {
-        console.log("WebSocket kliens csatlakozott");
-
-        socket.send(JSON.stringify({ type: 'history', payload: messages }));
-
-        socket.on('message', async data => {
-            try {
-                const { type, payload } = JSON.parse(data);
-                if(type === 'send'){
-                    const { to, text } = payload;
-
-                    if(to && text){
-                        await client.sendMessage(to, text);
-
-                        const item = {
-                            from: 'Me',
-                            name: 'Te',
-                            text,
-                            t: Date.now()
-                        };
-
-                        messages.push(item);
-                        if(messages.length > 200) messages.shift();
-
-                        const out = JSON.stringify({ type:'message', payload:item });
-                        wss.clients.forEach(ws => {
-                            if(ws.readyState === WebSocket.OPEN)
-                                ws.send(out);
-                        });
-                    }
-                }
-            }
-            catch(err){
-                console.error("WS hiba:", err);
-            }
-        });
-    });
-});
-
-// Bejövő WhatsApp üzenet
-client.on('message', async msg => {
-    try {
-        const item = {
-            from: msg.from,
-            name: msg._data.notifyName || msg._data.pushname || msg.from,
-            text: msg.body,
-            t: Date.now()
-        };
-
-        if(msg.hasMedia){
-            const media = await msg.downloadMedia();
-            if(media){
-                item.media = {
-                    mimetype: media.mimetype,
-                    data: media.data
-                };
-            }
-        }
-
-        messages.push(item);
-        if(messages.length > 200) messages.shift();
-
-        const out = JSON.stringify({ type:'message', payload:item });
-        wss.clients.forEach(ws => {
-            if(ws.readyState === WebSocket.OPEN)
-                ws.send(out);
-        });
-
-    } catch(e){
-        console.error("WhatsApp msg error:", e);
-    }
-});
-
-// API
-app.get('/api/messages', (req, res) => {
-    res.json(messages);
-});
-
-// HTML
-app.get('/', (req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send("<h1>WhatsApp fut</h1><p>Nézd a konzolt a QR kódért.</p>");
-});
-
-// *** 10000-es port ***
-// Renderen PORT környezeti változó kell — ha nincs, 10000-et használunk
-const PORT = process.env.PORT || 10000;
-
-server.listen(PORT, () =>
-    console.log("Szerver fut a " + PORT + " porton")
-);
-
-client.initialize();
+{
+  "name": "whatsapp-shared",
+  "version": "1.0.0",
+  "description": "Közös WhatsApp HTML chat oldal WebSocket + emoji támogatással",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "whatsapp-web.js": "^1.27.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
