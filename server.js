@@ -3,6 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,23 +11,18 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const messages = []; // Csak szöveges üzenetek
 
-// WhatsApp client LocalAuth
+// Render-en biztonságos LocalAuth hely (nem a projekt gyökér)
+const authPath = path.join('/tmp', 'wwebjs_auth_safe');
+
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
-        dataPath: './wwebjs_auth_safe'
+        dataPath: authPath
     })
 });
 
-client.on('qr', qr => {
-    console.log('QR kód beolvasáshoz:');
-    qrcode.generate(qr, { small: true });
-});
-
-client.on('authenticated', () => {
-    console.log('WhatsApp session mentve!');
-});
-
+client.on('qr', qr => qrcode.generate(qr, { small: true }));
+client.on('authenticated', () => console.log('WhatsApp session mentve!'));
 client.on('ready', () => {
     console.log('WhatsApp kliens csatlakozott!');
 
@@ -50,14 +46,11 @@ client.on('ready', () => {
                             t: Date.now()
                         };
 
-                        // Csak szöveges üzeneteket tárolunk
                         messages.push(item);
                         if(messages.length > 200) messages.shift();
 
                         const dataToSend = JSON.stringify({ type:'message', payload: item });
-                        wss.clients.forEach(s => {
-                            if(s.readyState === WebSocket.OPEN) s.send(dataToSend);
-                        });
+                        wss.clients.forEach(s => { if(s.readyState===WebSocket.OPEN) s.send(dataToSend); });
                     }
                 }
             } catch(err) { console.error(err); }
@@ -67,44 +60,31 @@ client.on('ready', () => {
     client.on('message', async msg => {
         try {
             const name = msg._data?.notifyName || msg.from;
-            const item = {
-                from: msg.from,
-                name,
-                text: msg.body,
-                t: Date.now()
-            };
+            const item = { from: msg.from, name, text: msg.body, t: Date.now() };
 
-            if (msg.hasMedia) {
+            if(msg.hasMedia) {
                 const media = await msg.downloadMedia();
-                if (media && media.data) {
-                    // Csak küldjük a kliensnek, nem tároljuk a szerveren
-                    item.media = {
-                        mimetype: media.mimetype,
-                        data: media.data
-                    };
+                if(media && media.data) {
+                    // Csak a frontendnek küldjük, szerveren nem marad
+                    item.media = { mimetype: media.mimetype, data: media.data };
                 }
             }
 
-            // Csak szöveges üzenetek kerülnek a messages tömbbe
-            if (!item.media) {
+            if(!item.media) {
                 messages.push(item);
                 if(messages.length > 200) messages.shift();
             }
 
             const dataToSend = JSON.stringify({ type:'message', payload: item });
-            wss.clients.forEach(socket => {
-                if(socket.readyState === WebSocket.OPEN) socket.send(dataToSend);
-            });
+            wss.clients.forEach(socket => { if(socket.readyState===WebSocket.OPEN) socket.send(dataToSend); });
 
-            // Ha volt média, törlés a memóriából
-            if(item.media) delete item.media;
-
+            if(item.media) delete item.media; // memória felszabadítás
         } catch(err) { console.error(err); }
     });
 });
 
-// Frontend HTML közvetlenül a Node.js-ben
-app.get('/', (req, res) => {
+// Frontend HTML
+app.get('/', (req,res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
 <html lang="hu">
@@ -112,7 +92,7 @@ app.get('/', (req, res) => {
 <meta charset="utf-8">
 <title>WhatsApp Közös Nézet + Válasz</title>
 <style>
-body { font-family: sans-serif; background:#f4f4f4; }
+body { font-family:sans-serif; background:#f4f4f4; }
 .header { text-align:center; margin:10px auto; font-size:18px; color:#000; display:flex; justify-content:space-between; align-items:center; max-width:800px; }
 .clock { color:#ffd106; font-weight:bold; }
 .messages { max-width:800px; margin:0 auto 20px; padding:10px; background:#fff; border-radius:8px; height:60vh; overflow:auto; }
@@ -153,86 +133,69 @@ ws.onerror = err => console.error('WebSocket hiba:', err);
 
 function updateClock() {
     const now = new Date();
-    const h = String(now.getHours()).padStart(2,'0');
-    const m = String(now.getMinutes()).padStart(2,'0');
-    const s = String(now.getSeconds()).padStart(2,'0');
-    document.getElementById('clock').textContent = h + ':' + m + ':' + s;
+    document.getElementById('clock').textContent =
+        String(now.getHours()).padStart(2,'0')+':'+
+        String(now.getMinutes()).padStart(2,'0')+':'+
+        String(now.getSeconds()).padStart(2,'0');
 }
-setInterval(updateClock, 1000);
+setInterval(updateClock,1000);
 updateClock();
 
 function addMessage(msg) {
-    const wrap = document.createElement('div');
-    wrap.className = 'msg';
-    wrap.dataset.from = msg.from;
+    const wrap = document.createElement('div'); wrap.className='msg'; wrap.dataset.from=msg.from;
+    const meta = document.createElement('div'); meta.className='meta';
+    meta.textContent = (msg.name||msg.from)+' @ '+new Date(msg.t).toLocaleString();
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = (msg.name || msg.from) + ' @ ' + new Date(msg.t).toLocaleString();
+    const replyBtn = document.createElement('button'); replyBtn.textContent='Válasz'; replyBtn.className='reply-btn';
+    replyBtn.onclick=()=>targetInput.value=msg.from; meta.appendChild(replyBtn);
 
-    const replyBtn = document.createElement('button');
-    replyBtn.textContent = 'Válasz';
-    replyBtn.className = 'reply-btn';
-    replyBtn.onclick = () => targetInput.value = msg.from;
-    meta.appendChild(replyBtn);
-
-    const delBtn = document.createElement('button');
-    delBtn.textContent = 'Törlés';
-    delBtn.className = 'del-btn';
-    delBtn.onclick = () => wrap.remove();
-    meta.appendChild(delBtn);
+    const delBtn = document.createElement('button'); delBtn.textContent='Törlés'; delBtn.className='del-btn';
+    delBtn.onclick=()=>wrap.remove(); meta.appendChild(delBtn);
 
     wrap.appendChild(meta);
 
-    if (msg.text) wrap.appendChild(document.createTextNode(msg.text));
-    if (msg.media && msg.media.data) {
+    if(msg.text) wrap.appendChild(document.createTextNode(msg.text));
+    if(msg.media && msg.media.data){
         const img = document.createElement('img');
-        img.src = "data:" + msg.media.mimetype + ";base64," + msg.media.data;
-        img.className = "media";
+        img.src="data:"+msg.media.mimetype+";base64,"+msg.media.data;
+        img.className="media";
         wrap.appendChild(img);
     }
 
     messagesEl.appendChild(wrap);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    messagesEl.scrollTop=messagesEl.scrollHeight;
 }
 
 ws.onmessage = ev => {
     const { type, payload } = JSON.parse(ev.data);
-    if(type === 'history') payload.forEach(addMessage);
-    if(type === 'message') addMessage(payload);
+    if(type==='history') payload.forEach(addMessage);
+    if(type==='message') addMessage(payload);
 };
 
-document.getElementById('chatForm').addEventListener('submit', e => {
+document.getElementById('chatForm').addEventListener('submit', e=>{
     e.preventDefault();
-    const text = replyInput.value.trim();
-    const to = targetInput.value;
-    if(!text || !to) { alert('Válaszd ki, kinek küldöd!'); return; }
-    ws.send(JSON.stringify({ type:'send', payload: { to, text } }));
-    replyInput.value = '';
+    const text=replyInput.value.trim();
+    const to=targetInput.value;
+    if(!text||!to){ alert('Válaszd ki, kinek küldöd!'); return; }
+    ws.send(JSON.stringify({ type:'send', payload:{to,text} }));
+    replyInput.value='';
 });
 
-// Emoji gombok
-const emojiCategories = {
-    "Smileys": ["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],
-    "Hearts": ["❤️","💔","💖","💙","💚","💛","💜","🖤"],
-    "Gestures": ["👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙏"]
-};
+const emojiCategories={"Smileys":["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],
+"Hearts":["❤️","💔","💖","💙","💚","💛","💜","🖤"],
+"Gestures":["👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙏"]};
 
-for (const cat in emojiCategories) {
-    emojiCategories[cat].forEach(e => {
-        const btn = document.createElement('button');
-        btn.textContent = e;
-        btn.className = 'emoji-btn';
-        btn.onclick = () => replyInput.value = e;
-        emojiContainer.appendChild(btn);
+for(const cat in emojiCategories)
+    emojiCategories[cat].forEach(e=>{
+        const btn=document.createElement('button'); btn.textContent=e; btn.className='emoji-btn';
+        btn.onclick=()=>replyInput.value=e; emojiContainer.appendChild(btn);
     });
-}
 </script>
 </body>
 </html>`);
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Szerver fut: http://localhost:' + PORT));
+const PORT = process.env.PORT||3000;
+server.listen(PORT,()=>console.log('Szerver fut: http://localhost:'+PORT));
 
 client.initialize();
