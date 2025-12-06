@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const messages = [];
 
-// LocalAuth session mappa
+// WhatsApp client LocalAuth
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
@@ -23,7 +23,7 @@ client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
 });
 
-client.on('authenticated', session => {
+client.on('authenticated', () => {
     console.log('WhatsApp session mentve!');
 });
 
@@ -61,10 +61,12 @@ client.on('ready', () => {
 
     client.on('message', async msg => {
         try {
-            const contact = await msg.getContact();
+            // Hibamentes név lekérés
+            const name = msg._data?.notifyName || msg.from;
+
             const item = {
                 from: msg.from,
-                name: contact.pushname || contact.number,
+                name,
                 text: msg.body,
                 t: Date.now()
             };
@@ -90,7 +92,7 @@ client.on('ready', () => {
     });
 });
 
-// Frontend
+// Frontend HTML közvetlenül a Node.js-ben
 app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
@@ -126,7 +128,6 @@ button { padding:8px 14px; border:none; border-radius:6px; background:#4caf50; c
 <button type="submit">Küldés</button>
 </form>
 
-<!-- Emoji külön sorok -->
 <div class="emoji-row" id="emojiContainer"></div>
 
 <script>
@@ -139,7 +140,6 @@ const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+locatio
 ws.onopen = () => console.log('WebSocket csatlakozott!');
 ws.onerror = err => console.error('WebSocket hiba:', err);
 
-// Óra
 function updateClock() {
     const now = new Date();
     const h = String(now.getHours()).padStart(2,'0');
@@ -200,7 +200,7 @@ document.getElementById('chatForm').addEventListener('submit', e => {
     replyInput.value = '';
 });
 
-// Emoji külön sorok
+// Emoji gombok
 const emojiCategories = {
     "Smileys": ["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","☺️","😊","😇","🙂","🙃","😉","😍","🥰","😘"],
     "Hearts": ["❤️","💔","💖","💙","💚","💛","💜","🖤"],
