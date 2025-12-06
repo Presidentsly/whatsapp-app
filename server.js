@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
-const messages = [];
+const messages = []; // Csak szöveges üzenetek
 
 // WhatsApp client LocalAuth
 const client = new Client({
@@ -32,6 +32,7 @@ client.on('ready', () => {
 
     // WebSocket kapcsolat
     wss.on('connection', socket => {
+        // Küldjük a chat történetet (csak szöveges üzenetek)
         socket.send(JSON.stringify({ type:'history', payload: messages }));
 
         socket.on('message', async data => {
@@ -41,14 +42,18 @@ client.on('ready', () => {
                     const { to, text } = payload;
                     if(to && text) {
                         await client.sendMessage(to, text);
+
                         const item = {
                             from: 'Me',
                             name: 'Te',
                             text,
                             t: Date.now()
                         };
+
+                        // Csak szöveges üzeneteket tárolunk
                         messages.push(item);
                         if(messages.length > 200) messages.shift();
+
                         const dataToSend = JSON.stringify({ type:'message', payload: item });
                         wss.clients.forEach(s => {
                             if(s.readyState === WebSocket.OPEN) s.send(dataToSend);
@@ -61,9 +66,7 @@ client.on('ready', () => {
 
     client.on('message', async msg => {
         try {
-            // Hibamentes név lekérés
             const name = msg._data?.notifyName || msg.from;
-
             const item = {
                 from: msg.from,
                 name,
@@ -74,6 +77,7 @@ client.on('ready', () => {
             if (msg.hasMedia) {
                 const media = await msg.downloadMedia();
                 if (media && media.data) {
+                    // Csak küldjük a kliensnek, nem tároljuk a szerveren
                     item.media = {
                         mimetype: media.mimetype,
                         data: media.data
@@ -81,13 +85,20 @@ client.on('ready', () => {
                 }
             }
 
-            messages.push(item);
-            if(messages.length > 200) messages.shift();
+            // Csak szöveges üzenetek kerülnek a messages tömbbe
+            if (!item.media) {
+                messages.push(item);
+                if(messages.length > 200) messages.shift();
+            }
 
             const dataToSend = JSON.stringify({ type:'message', payload: item });
             wss.clients.forEach(socket => {
                 if(socket.readyState === WebSocket.OPEN) socket.send(dataToSend);
             });
+
+            // Ha volt média, törlés a memóriából
+            if(item.media) delete item.media;
+
         } catch(err) { console.error(err); }
     });
 });
