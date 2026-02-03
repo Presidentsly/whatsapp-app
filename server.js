@@ -5,6 +5,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 
+console.log("NODE VERSION:", process.version);
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
@@ -33,7 +35,7 @@ const client = new Client({
 });
 
 
-// ===== DEBUG ESEMÉNYEK =====
+// ===== DEBUG =====
 
 client.on('qr', qr => {
     console.log('QR generálva');
@@ -57,7 +59,7 @@ client.on('change_state', state => {
 });
 
 client.on('auth_failure', msg => {
-    console.error('Auth hiba:', msg);
+    console.log('AUTH HIBA:', msg);
 });
 
 client.on('disconnected', reason => {
@@ -72,7 +74,6 @@ wss.on('connection', socket => {
     socket.send(JSON.stringify({ type:'history', payload: messages }));
 
     socket.on('message', async data => {
-
         try {
             const { type, payload } = JSON.parse(data);
 
@@ -104,9 +105,8 @@ wss.on('connection', socket => {
             }
 
         } catch(err) {
-            console.error('WS hiba:', err);
+            console.error('WS HIBA:', err);
         }
-
     });
 });
 
@@ -127,7 +127,6 @@ client.on('message', async msg => {
         };
 
         if(msg.hasMedia) {
-
             const media = await msg.downloadMedia();
 
             if(media?.data) {
@@ -145,13 +144,13 @@ client.on('message', async msg => {
 
         const sendData = JSON.stringify({ type:'message', payload:item });
 
-        wss.clients.forEach(s => {
-            if(s.readyState === WebSocket.OPEN)
-                s.send(sendData);
+        wss.clients.forEach(socket => {
+            if(socket.readyState === WebSocket.OPEN)
+                socket.send(sendData);
         });
 
     } catch(err) {
-        console.error('Message hiba:', err);
+        console.error('MESSAGE HIBA:', err);
     }
 
 });
@@ -160,17 +159,17 @@ client.on('message', async msg => {
 // ===== FRONTEND =====
 
 app.get('/', (req,res) => {
-
-res.setHeader('Content-Type','text/html; charset=utf-8');
+res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
 res.send(`<!doctype html>
-<html>
+<html lang="hu">
 <body>
+
 <h2>WhatsApp Chat</h2>
 <div id="messages"></div>
 
-<input id="target" placeholder="Telefonszám@c.us">
-<input id="reply" placeholder="Üzenet">
+<input id="target" placeholder="telefonszám@c.us">
+<input id="reply" placeholder="üzenet">
 <button onclick="send()">Küldés</button>
 
 <script>
@@ -203,7 +202,6 @@ function send(){
 </script>
 </body>
 </html>`);
-
 });
 
 
@@ -211,8 +209,6 @@ function send(){
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-    console.log('Szerver fut:', PORT);
-});
+server.listen(PORT,()=>console.log('Szerver fut:',PORT));
 
 client.initialize();
