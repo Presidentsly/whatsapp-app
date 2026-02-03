@@ -11,16 +11,30 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const messages = []; // Csak szöveges üzenetek
 
-// Render-en biztonságos LocalAuth hely (nem a projekt gyökér)
+// Render-en biztonságos LocalAuth hely
 const authPath = path.join('/tmp', 'wwebjs_auth_safe');
 
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
         dataPath: authPath
-    })
+    }),
+    puppeteer: {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
+    }
 });
 
+// QR kód konzolra
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
 client.on('authenticated', () => console.log('WhatsApp session mentve!'));
 client.on('ready', () => {
@@ -28,15 +42,14 @@ client.on('ready', () => {
 
     // WebSocket kapcsolat
     wss.on('connection', socket => {
-        // Küldjük a chat történetet (csak szöveges üzenetek)
-        socket.send(JSON.stringify({ type:'history', payload: messages }));
+        socket.send(JSON.stringify({ type: 'history', payload: messages }));
 
         socket.on('message', async data => {
             try {
                 const { type, payload } = JSON.parse(data);
-                if(type === 'send') {
+                if (type === 'send') {
                     const { to, text } = payload;
-                    if(to && text) {
+                    if (to && text) {
                         await client.sendMessage(to, text);
 
                         const item = {
@@ -47,13 +60,17 @@ client.on('ready', () => {
                         };
 
                         messages.push(item);
-                        if(messages.length > 200) messages.shift();
+                        if (messages.length > 200) messages.shift();
 
-                        const dataToSend = JSON.stringify({ type:'message', payload: item });
-                        wss.clients.forEach(s => { if(s.readyState===WebSocket.OPEN) s.send(dataToSend); });
+                        const dataToSend = JSON.stringify({ type: 'message', payload: item });
+                        wss.clients.forEach(s => {
+                            if (s.readyState === WebSocket.OPEN) s.send(dataToSend);
+                        });
                     }
                 }
-            } catch(err) { console.error(err); }
+            } catch (err) {
+                console.error('Hiba a WebSocket üzenetnél:', err);
+            }
         });
     });
 
@@ -62,29 +79,32 @@ client.on('ready', () => {
             const name = msg._data?.notifyName || msg.from;
             const item = { from: msg.from, name, text: msg.body, t: Date.now() };
 
-            if(msg.hasMedia) {
+            if (msg.hasMedia) {
                 const media = await msg.downloadMedia();
-                if(media && media.data) {
-                    // Csak a frontendnek küldjük, szerveren nem marad
+                if (media && media.data) {
                     item.media = { mimetype: media.mimetype, data: media.data };
                 }
             }
 
-            if(!item.media) {
+            if (!item.media) {
                 messages.push(item);
-                if(messages.length > 200) messages.shift();
+                if (messages.length > 200) messages.shift();
             }
 
-            const dataToSend = JSON.stringify({ type:'message', payload: item });
-            wss.clients.forEach(socket => { if(socket.readyState===WebSocket.OPEN) socket.send(dataToSend); });
+            const dataToSend = JSON.stringify({ type: 'message', payload: item });
+            wss.clients.forEach(socket => {
+                if (socket.readyState === WebSocket.OPEN) socket.send(dataToSend);
+            });
 
-            if(item.media) delete item.media; // memória felszabadítás
-        } catch(err) { console.error(err); }
+            if (item.media) delete item.media; // memória felszabadítás
+        } catch (err) {
+            console.error('Hiba a bejövő üzenetnél:', err);
+        }
     });
 });
 
-// Frontend HTML
-app.get('/', (req,res) => {
+// Frontend + WebSocket + emoji egyben
+app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
 <html lang="hu">
@@ -195,7 +215,7 @@ for(const cat in emojiCategories)
 </html>`);
 });
 
-const PORT = process.env.PORT||3000;
-server.listen(PORT,()=>console.log('Szerver fut: http://localhost:'+PORT));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log('Szerver fut: http://localhost:' + PORT));
 
 client.initialize();
