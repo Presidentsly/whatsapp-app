@@ -15,8 +15,18 @@ const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'default',
         dataPath: './wwebjs_auth_safe'
-    })
+    }),
+    puppeteer: {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
+    }
 });
+
 
 // QR kód a terminálba
 client.on('qr', qr => {
